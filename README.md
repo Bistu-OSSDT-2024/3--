@@ -1,1 +1,1 @@
-# 3--GIF Animation Script
+# 3--GIF Animation Script 
