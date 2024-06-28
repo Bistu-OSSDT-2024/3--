@@ -1,0 +1,111 @@
+import tkinter as tk
+from PIL import Image, ImageTk, ImageSequence
+import requests
+import time
+import signal
+
+# 智谱AI对话API端点
+API_ENDPOINT = "https://open.bigmodel.cn/api/v1/service/chat/completions"
+
+# 智谱AI API key
+API_KEY = "a336de16be9129735958bf609e96f83b.TV85u0UXNaSYvVL5"
+
+
+class AnimatedGif(tk.Label):
+    def __init__(self, master, gif_path, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.master = master
+        self.gif_path = gif_path
+        self.frames = self._load_gif_frames()  # 加载所有帧
+        self.frame_index = 0
+        self._update_image()
+        self.pack()
+
+    def _load_gif_frames(self):
+        # Load all frames of the GIF image
+        with Image.open(self.gif_path) as img:
+            frames = [ImageTk.PhotoImage(f) for f in ImageSequence.Iterator(img)]
+        return frames
+
+    def _update_image(self):
+        # Update the image to the next frame
+        self.frame_index = (self.frame_index + 1) % len(self.frames)
+        self.config(image=self.frames[self.frame_index])
+
+        # Schedule the next image update
+        duration = self.frames[self.frame_index].duration if hasattr(self.frames[self.frame_index], 'duration') else 100
+        self.master.after(duration, self._update_image)
+
+    def on_pet_event(self):
+        # 发送数据到AI服务，并处理响应
+        data = {
+            "model": "chatglm-6b",  # 使用智谱AI的chatglm-6b模型
+            "messages": [
+                {"role": "user", "content": "你好！"}
+            ]
+        }
+        self.call_ai_service(data)
+
+    def call_ai_service(self, data):
+        # 尝试调用AI服务，带有重试逻辑
+        self.retry_call_ai_service(data, retries=3, delay=2)
+
+    def retry_call_ai_service(self, data, retries, delay):
+        headers = {
+            'Authorization': f'Bearer {API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        for attempt in range(retries):
+            try:
+                response = requests.post(API_ENDPOINT, json=data, headers=headers)
+                if response.status_code == 200:
+                    # 处理AI服务的响应
+                    ai_result = response.json()
+                    self.show_qa_page(ai_result)  # 显示问答页面
+                    return
+                else:
+                    print(f"Failed to call AI service: {response.status_code} (Attempt {attempt + 1}/{retries})")
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+                break  # 如果发生网络错误，跳出循环
+
+            if attempt + 1 < retries:
+                time.sleep(delay)  # 等待一段时间再重试
+            else:
+                print("All attempts failed. Please try again later.")
+
+    def show_qa_page(self, ai_result):
+        # 创建一个新的窗口来展示问答信息
+        qa_window = tk.Toplevel(self.master)
+        qa_window.title("AI Q&A")
+
+        # 创建一个标签来显示AI的问题和回答
+        question_text = "Question: " + ai_result.get("question", "No question")
+        answer_text = "Answer: " + ai_result.get("answer", "No answer")
+        qa_text = question_text + "\n" + answer_text
+        answer_label = tk.Label(qa_window, text=qa_text, wraplength=300)
+        answer_label.pack(pady=20, padx=20)
+
+        # 添加一个按钮来关闭问答窗口
+        close_button = tk.Button(qa_window, text="Close", command=qa_window.destroy)
+        close_button.pack(pady=10)
+
+
+# Create the main window
+root = tk.Tk()
+root.title("GIF Animation")
+
+# Specify the path to the GIF file
+gif_path = r"C:\Users\lenovo\Desktop\640.gif"
+
+# Create and run the animated GIF
+animated_gif = AnimatedGif(root, gif_path)
+
+# 假设用户点击桌宠时，我们想调用AI服务
+animated_gif.bind("<Button-1>", lambda event: animated_gif.on_pet_event())
+
+# Start the main loop
+try:
+    root.mainloop()
+except KeyboardInterrupt:
+    print("程序已中断。")
